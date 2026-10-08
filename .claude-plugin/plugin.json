@@ -1,0 +1,9 @@
+{
+  "name": "roclaude",
+  "version": "0.5.0",
+  "description": "Roblox Studio safety layer for Claude Code (Studio MCP): RemoteEvent security audit, undo, Team Create protection, a confirmation before destructive Luau, and a live activity view that replays every change.",
+  "author": { "name": "vink" },
+  "license": "MIT",
+  "keywords": ["roblox", "roblox-studio", "luau", "mcp", "team-create", "claude-code-mod"],
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "roclaude",
+  "description": "Roblox Studio development helpers for Claude Code.",
+  "owner": { "name": "vink" },
+  "plugins": [{ "name": "roclaude", "source": "./" }]
+}
