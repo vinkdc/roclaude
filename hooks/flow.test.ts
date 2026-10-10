@@ -61,6 +61,9 @@ test('classifies every handler', () => {
 let consoleOutput = ''
 // The fake place's objects and their properties, for inspect_instance.
 const objects = new Map<string, Record<string, string | number | boolean>>()
+// The mod's script_read calls so far, and which one fails (none: -1).
+let scriptReads = 0
+let failingRead = -1
 
 // A fake Studio: scripts by path, answering the Studio tools the mod and Claude call.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,6 +80,9 @@ function fakeStudio(on: any, scripts: Map<string, string>) {
       return props === undefined ? text('Instance not found', true) : text(JSON.stringify({ path: e.args.path, properties: props }))
     }
     if (e.tool === 'script_read') {
+      // A read the test marks as failing: Studio answers an error, not "not found".
+      scriptReads += 1
+      if (scriptReads === failingRead) return text('Studio did not answer in time', true)
       const source = scripts.get(e.args.target_file)
       return source === undefined ? text('Script not found at path', true) : text(numbered(source))
     }
@@ -380,4 +386,50 @@ test('an edit Claude makes without a studio_id is still saved for undo and diffe
   expect(await ui.find({ type: 'Code' })).toBeDefined()
   expect(await ui.find({ key: 'undo-last' })).toBeDefined()
   await ui.unmount()
+})
+
+// The mod reads a script before Claude's multi_edit (read 1) and right after
+// it (read 2); these tests make read 2 fail, then a teammate edits the script.
+test('undo refuses when the script could not be read right after the edit', async ($, on) => {
+  const scripts = new Map([[PATH, 'local price = 5']])
+  fakeStudio(on, scripts)
+  scriptReads = 0
+  failingRead = 2
+
+  await $.tool.call(
+    call('multi_edit', { datamodel_type: 'Edit', file_path: PATH, edits: [{ old_string: 'local price = 5', new_string: 'local price = 10' }] }),
+  )
+  failingRead = -1
+  scripts.set(PATH, 'local price = 10\n-- teammate line')
+
+  const refused = await $.command.run({ command: 'roclaude', args: 'undo' } as never)
+  expect(refused.text).toContain('could not be read right after')
+  expect(scripts.get(PATH)).toBe('local price = 10\n-- teammate line')
+
+  const forced = await $.command.run({ command: 'roclaude', args: 'undo force' } as never)
+  expect(forced.text).toContain('Restored')
+  expect(scripts.get(PATH)).toBe('local price = 5')
+})
+
+test('undo of a created script refuses when it could not be read right after creation', async ($, on) => {
+  const created = 'game.ServerScriptService.NewThing'
+  const scripts = new Map<string, string>()
+  fakeStudio(on, scripts)
+  scriptReads = 0
+  failingRead = 2
+
+  await $.tool.call(
+    call('multi_edit', {
+      datamodel_type: 'Edit',
+      file_path: created,
+      className: 'Script',
+      edits: [{ old_string: '', new_string: 'print("new")' }],
+    }),
+  )
+  failingRead = -1
+  scripts.set(created, 'print("new")\n-- teammate line')
+
+  const refused = await $.command.run({ command: 'roclaude', args: 'undo' } as never)
+  expect(refused.text).toContain('could not be read right after')
+  expect(scripts.get(created)).toBe('print("new")\n-- teammate line')
 })

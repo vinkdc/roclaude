@@ -3,7 +3,7 @@ export type LintReport = { file: string; issues: readonly LintIssue[] }
 
 /**
  * A script as it was before Claude's multi_edit (`source`, null when the edit
- * created it) and right after (`after`, null when it could not be read).
+ * created it) and right after (`after`, null unless `afterStatus` is `read`).
  */
 export type Snapshot = {
   id: number
@@ -12,6 +12,12 @@ export type Snapshot = {
   path: string
   source: string | null
   after: string | null
+  /**
+   * How the read right after the edit went: `read`, the script was `missing`,
+   * or `unknown` when Studio did not answer. Only `read` lets a plain undo
+   * tell whether someone changed the script since.
+   */
+  afterStatus: 'read' | 'missing' | 'unknown'
   /** The turn the edit was made in, for replaying one turn. */
   turn: number
 }

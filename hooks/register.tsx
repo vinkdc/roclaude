@@ -107,6 +107,11 @@ async function undo($: EngineInterface, isForced: boolean): Promise<string> {
   if (current === undefined) {
     return `Could not read ${path} to undo it. Is Studio still open and in Edit mode?`
   }
+  // Without the script as Claude's edit left it, there is no telling whether
+  // someone changed it since: only a forced undo goes ahead.
+  if (!isForced && last.afterStatus !== 'read') {
+    return `${path} could not be read right after Claude's edit, so roclaude cannot tell whether you or a teammate changed it since. Run /roclaude undo force to restore Claude's saved copy anyway.`
+  }
   // In Team Create someone else may have edited the script since: never
   // overwrite that work unless asked to.
   if (!isForced && last.after !== null && current !== null && current !== last.after) {
@@ -739,12 +744,15 @@ export const register: Register = on => {
     if (!isEdited) return ran
     await update($, studio, info => ({ ...(info ?? NO_STUDIO), untested: (info?.untested ?? 0) + 1 }))
 
-    const after = before !== undefined ? ((await readScript($, found.server, sid, path)) ?? null) : null
+    // An unreadable script (undefined) is not a missing one (null): undo must know which.
+    const afterRead = before !== undefined ? await readScript($, found.server, sid, path) : undefined
+    const after = typeof afterRead === 'string' ? afterRead : null
+    const afterStatus = typeof afterRead === 'string' ? 'read' : afterRead === null ? 'missing' : 'unknown'
     if (before !== undefined) {
       const turn = await read($, turnNo)
       await update($, history, list => {
         const id = (list[list.length - 1]?.id ?? 0) + 1
-        const snapshot: Snapshot = { id, server: found.server, studioId: sid, path, source: before, after, turn }
+        const snapshot: Snapshot = { id, server: found.server, studioId: sid, path, source: before, after, afterStatus, turn }
         return [...list, snapshot].slice(-MAX_SNAPSHOTS)
       })
     }
